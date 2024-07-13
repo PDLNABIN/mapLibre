@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Enhanced Map with MapLibre GL JS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        .map-overlay { position: absolute; background-color: white; padding: 10px; border-radius: 5px; z-index: 1; }
+        .legend { bottom: 30px; left: 10px; }
+        .search-box { top: 10px; left: 10px; width: 300px; }
+        .mapboxgl-ctrl-geocoder { min-width: 300px; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="map-overlay legend">
+        <h4>Legend</h4>
+        <div><span style="background-color:#088; width: 20px; height: 20px; display: inline-block;"></span> Buildings</div>
+        <div><span style="background-color:#FF0000; width: 20px; height: 2px; display: inline-block;"></span> District Boundaries</div>
+    </div>
+    <div class="map-overlay search-box">
+        <input id="search" type="text" placeholder="Search for a place" />
+        <button id="searchButton">Search</button>
+    </div>
+    <script>
+        // Initialize the map
+        var map = new maplibregl.Map({
+            container: 'map', // container ID
+            style: {
+                version: 8,
+                sources: {
+                    "simple-tiles": {
+                        type: "raster",
+                        tiles: [
+                            "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        ],
+                        tileSize: 256,
+                        attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+                    }
+                },
+                layers: [
+                    {
+                        id: "simple-tiles",
+                        type: "raster",
+                        source: "simple-tiles",
+                        minzoom: 0,
+                        maxzoom: 22
+                    }
+                ]
+            },
+            center: [85.5342, 27.6022], // starting position [lng, lat] for Kathmandu University
+            zoom: 15, // starting zoom level for a closer view
+            pitch: 60, // tilt the map for 3D effect
+            bearing: -20 // adjust the rotation angle for better view
+        });
+
+        // Add zoom and rotation controls to the map.
+        map.addControl(new maplibregl.NavigationControl());
+
+        // Load GeoJSON data
+        map.on('load', function() {
+            // Load and add building GeoJSON data
+            fetch('build.geojson')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(buildingData => {
+                    console.log('Building GeoJSON data:', buildingData); // Debugging output
+                    map.addSource('buildings', {
+                        'type': 'geojson',
+                        'data': buildingData
+                    });
+
+                    map.addLayer({
+                        'id': 'buildings-layer',
+                        'type': 'fill-extrusion',
+                        'source': 'buildings',
+                        'layout': {},
+                        'paint': {
+                            'fill-extrusion-color': '#088',
+                            'fill-extrusion-height': [
+                                'case',
+                                ['has', 'height'],
+                                ['get', 'height'],
+                                10 // default height if 'height' is not available
+                            ],
+                            'fill-extrusion-base': 0,
+                            'fill-extrusion-opacity': 0.8
+                        }
+                    });
+                })
+                .catch(error => console.error('Error loading Building GeoJSON:', error));
+
+            // Load and add district boundary GeoJSON data
+            fetch('nepal-districts.geojson')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(districtData => {
+                    console.log('District Boundary GeoJSON data:', districtData); // Debugging output
+                    map.addSource('district-boundaries', {
+                        'type': 'geojson',
+                        'data': districtData
+                    });
+
+                    map.addLayer({
+                        'id': 'district-boundaries-layer',
+                        'type': 'line',
+                        'source': 'district-boundaries',
+                        'layout': {},
+                        'paint': {
+                            'line-color': '#FF0000',
+                            'line-width': 2
+                        }
+                    });
+                })
+                .catch(error => console.error('Error loading District Boundary GeoJSON:', error));
+        });
+
+        // Add search functionality
+        document.getElementById('searchButton').addEventListener('click', function() {
+            var query = document.getElementById('search').value;
+            var url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        var bbox = data[0].boundingbox;
+                        map.fitBounds([
+                            [bbox[2], bbox[0]],
+                            [bbox[3], bbox[1]]
+                        ]);
+                    } else {
+                        alert('Location not found');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        });
+    </script>
+</body>
+</html>
